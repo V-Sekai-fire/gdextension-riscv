@@ -1,0 +1,37 @@
+name: Build Godot C++ GDExtension
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+
+      - name: Install dependencies
+        run: sudo apt-get install cmake ninja-build
+
+      - name: Build
+        run: |
+          set -e
+          mkdir -p .build
+          pushd .build
+          cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release
+          ninja
+          popd
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: godot-cpp-build
+          path: .build/**
