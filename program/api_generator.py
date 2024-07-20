@@ -1,12 +1,9 @@
-import json
 import os
 import re
 from pathlib import Path
 
-
 def find_files_recursively(dir, glob_pattern):
     return ["{0}".format(path.relative_to(dir)) for path in Path(dir).rglob(glob_pattern)]
-
 
 def parse_method(method_line, class_name):
     if "(" not in method_line:
@@ -102,7 +99,6 @@ def parse_method(method_line, class_name):
     method["arguments"] = args
     return method
 
-
 def extract_methods_from_header(header_content, class_name):
     method_pattern = re.compile(r"\b(?:virtual\s+|static\s+)?\w[\w\s:&*<>]*\s+\w+\s*\([^)]*\)\s*(?:const)?\s*;")
     methods = []
@@ -114,10 +110,8 @@ def extract_methods_from_header(header_content, class_name):
                 methods.append(method_info)
     return methods
 
-
 def parse_struct(struct_lines):
     return parse_class(struct_lines, True)
-
 
 def parse_class(class_lines, public_default=False):
     if not class_lines:
@@ -202,7 +196,6 @@ def parse_class(class_lines, public_default=False):
 
     return class_dict
 
-
 def parse_header_file(file_path):
     # assumes that header files are prettified and have newlines at the regular places
     # if that's not the case, just run a prettifier on the files and try again
@@ -260,10 +253,59 @@ def parse_header_file(file_path):
     header_file = {"classes": classes, "structs": structs, "enums": enums}
     return header_file
 
+def generate_cpp_files(file_classes_dict, output_folder):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for file_path, content in file_classes_dict.items():
+        base_name = os.path.basename(file_path)
+        name_without_ext = os.path.splitext(base_name)[0]
+
+        header_file_path = os.path.join(output_folder, f"{name_without_ext}.h")
+        source_file_path = os.path.join(output_folder, f"{name_without_ext}.cpp")
+
+        with open(header_file_path, "w") as header_file, open(source_file_path, "w") as source_file:
+            header_file.write(f"#ifndef {name_without_ext.upper()}_H\n")
+            header_file.write(f"#define {name_without_ext.upper()}_H\n\n")
+            header_file.write("#include <string>\n")
+            header_file.write("#include <vector>\n\n")
+
+            for class_info in content["classes"]:
+                write_class_to_files(class_info, header_file, source_file)
+
+            header_file.write(f"\n#endif // {name_without_ext.upper()}_H\n")
+
+def write_class_to_files(class_info, header_file, source_file):
+    class_name = class_info["name"]
+    header_file.write(f"class {class_name}")
+    if class_info.get("base_class"):
+        header_file.write(f" : public {class_info['base_class']}")
+    header_file.write(" {\npublic:\n")
+
+    for method in class_info["methods"]:
+        write_method_to_header(method, header_file)
+        write_method_to_source(method, class_name, source_file)
+
+    header_file.write("};\n\n")
+
+def write_method_to_header(method, header_file):
+    return_type = method.get("return_type", "void")
+    method_name = method["name"]
+    arguments = ", ".join([f"{arg['type']} {arg['name']}" for arg in method["arguments"]])
+    header_file.write(f"    {return_type} {method_name}({arguments});\n")
+
+def write_method_to_source(method, class_name, source_file):
+    return_type = method.get("return_type", "void")
+    method_name = method["name"]
+    arguments = ", ".join([f"{arg['type']} {arg['name']}" for arg in method["arguments"]])
+    argument_names = ", ".join([arg["name"] for arg in method["arguments"]])
+    source_file.write(f"{return_type} {class_name}::{method_name}({arguments}) {{\n")
+    source_file.write(f"    // TODO: Implement {method_name}\n")
+    source_file.write("}\n\n")
 
 if __name__ == "__main__":
     input_folder = "../.build/godot-cpp/gen"
-    output_folder = "./Generated"
+    output_folder = "./generated"
 
     # Step 1 make a dictionary that shows the relationship of files to class to methods
     # Step 2 create the empty skeleton class that will live on the Wasm side. Our current target is C++, so these will be C++ style header and cpp files
@@ -279,5 +321,4 @@ if __name__ == "__main__":
         if not input_file.startswith("thirdparty/") and not input_file.startswith("tests/"):
             file_classes_dict[input_file] = parse_header_file(os.path.join(input_folder, input_file))
 
-    with open("wasgo_api.json", "w") as file:
-        file.write(json.dumps(file_classes_dict, indent=4))  # use `json.loads` to do the reverse
+    generate_cpp_files(file_classes_dict, output_folder)
