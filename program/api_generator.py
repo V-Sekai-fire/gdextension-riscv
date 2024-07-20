@@ -104,7 +104,7 @@ def extract_methods_from_header(header_content, class_name):
     methods = []
     for line in header_content.splitlines():
         line = line.strip()
-        if method_pattern.match(line):
+        if method_pattern.match(line) and not line.endswith(";"):
             method_info = parse_method(line, class_name)
             if method_info:
                 methods.append(method_info)
@@ -166,7 +166,7 @@ def parse_class(class_lines, public_default=False):
                     nested_struct_lines.append(line)
                 elif line.startswith("enum"):
                     enum_lines.append(line)
-                elif "(" in line:
+                elif "(" in line and not line.endswith(";"):
                     method = parse_method(line, class_dict["name"])
                     if method:
                         class_dict["methods"].append(method)
@@ -253,7 +253,7 @@ def parse_header_file(file_path):
     header_file = {"classes": classes, "structs": structs, "enums": enums}
     return header_file
 
-def generate_cpp_files(file_classes_dict, output_folder):
+def generate_hpp_files(file_classes_dict, output_folder):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -261,50 +261,42 @@ def generate_cpp_files(file_classes_dict, output_folder):
         base_name = os.path.basename(file_path)
         name_without_ext = os.path.splitext(base_name)[0]
 
-        header_file_path = os.path.join(output_folder, f"{name_without_ext}.h")
-        source_file_path = os.path.join(output_folder, f"{name_without_ext}.cpp")
+        hpp_file_path = os.path.join(output_folder, f"{name_without_ext}.hpp")
 
-        with open(header_file_path, "w") as header_file, open(source_file_path, "w") as source_file:
-            header_file.write(f"#ifndef {name_without_ext.upper()}_H\n")
-            header_file.write(f"#define {name_without_ext.upper()}_H\n\n")
-            header_file.write("#include <string>\n")
-            header_file.write("#include <vector>\n\n")
+        with open(hpp_file_path, "w") as hpp_file:
+            hpp_file.write(f"#ifndef {name_without_ext.upper()}_HPP\n")
+            hpp_file.write(f"#define {name_without_ext.upper()}_HPP\n\n")
+            hpp_file.write("#include <string>\n")
+            hpp_file.write("#include <vector>\n\n")
 
             for class_info in content["classes"]:
-                write_class_to_files(class_info, header_file, source_file)
+                write_class_to_hpp(class_info, hpp_file)
 
-            header_file.write(f"\n#endif // {name_without_ext.upper()}_H\n")
+            hpp_file.write(f"\n#endif // {name_without_ext.upper()}_HPP\n")
 
-def write_class_to_files(class_info, header_file, source_file):
+def write_class_to_hpp(class_info, hpp_file):
     class_name = class_info["name"]
-    header_file.write(f"class {class_name}")
+    hpp_file.write(f"class {class_name}")
     if class_info.get("base_class"):
-        header_file.write(f" : public {class_info['base_class']}")
-    header_file.write(" {\npublic:\n")
+        hpp_file.write(f" : public {class_info['base_class']}")
+    hpp_file.write(" {\npublic:\n")
 
     for method in class_info["methods"]:
-        write_method_to_header(method, header_file)
-        write_method_to_source(method, class_name, source_file)
+        write_method_to_hpp(method, class_name, hpp_file)
 
-    header_file.write("};\n\n")
+    hpp_file.write("};\n\n")
 
-def write_method_to_header(method, header_file):
+def write_method_to_hpp(method, class_name, hpp_file):
     return_type = method.get("return_type", "void")
     method_name = method["name"]
     arguments = ", ".join([f"{arg['type']} {arg['name']}" for arg in method["arguments"]])
-    header_file.write(f"    {return_type} {method_name}({arguments});\n")
-
-def write_method_to_source(method, class_name, source_file):
-    return_type = method.get("return_type", "void")
-    method_name = method["name"]
-    arguments = ", ".join([f"{arg['type']} {arg['name']}" for arg in method["arguments"]])
-    argument_names = ", ".join([arg["name"] for arg in method["arguments"]])
-    source_file.write(f"{return_type} {class_name}::{method_name}({arguments}) {{\n")
-    source_file.write(f"    // TODO: Implement {method_name}\n")
-    source_file.write("}\n\n")
+    hpp_file.write(f"    {return_type} {method_name}({arguments});\n")
+    hpp_file.write(f"{return_type} {class_name}::{method_name}({arguments}) {{\n")
+    hpp_file.write(f"    // TODO: Implement {method_name}\n")
+    hpp_file.write("}\n\n")
 
 if __name__ == "__main__":
-    input_folder = "../.build/godot-cpp/gen"
+    input_folder = "../.build/godot-cpp/gen/include/godot_cpp/variant"
     output_folder = "./generated"
 
     # Step 1 make a dictionary that shows the relationship of files to class to methods
@@ -314,11 +306,12 @@ if __name__ == "__main__":
     # Step 5 create the function table that links the Godot wrappers to the wasm wrappers
 
     # ******* STEP 1 ********
-    input_files = find_files_recursively(input_folder, "*.h") + find_files_recursively(input_folder, "*.hpp")
+    input_files = find_files_recursively(input_folder, "*.hpp")
 
     file_classes_dict = {}
     for input_file in input_files:
         if not input_file.startswith("thirdparty/") and not input_file.startswith("tests/"):
             file_classes_dict[input_file] = parse_header_file(os.path.join(input_folder, input_file))
 
-    generate_cpp_files(file_classes_dict, output_folder)
+    generate_hpp_files(file_classes_dict, output_folder)
+    
