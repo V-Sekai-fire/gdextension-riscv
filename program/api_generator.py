@@ -23,6 +23,8 @@ def parse_class(cursor):
         if c.kind == clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
             class_info["base_classes"].append(c.spelling)
         elif c.kind == clang.cindex.CursorKind.CXX_METHOD:
+            if c.spelling == "GDEXTENSION_CLASS":
+                continue
             method_info = {
                 "name": c.spelling,
                 "return_type": c.result_type.spelling,
